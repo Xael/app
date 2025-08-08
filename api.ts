@@ -15,9 +15,7 @@ async function request<T = any>(
   path: string,
   opts: RequestInit = {}
 ): Promise<T> {
-  const res = await fetch(urlJoin(path), {
-    ...opts,
-  });
+  const res = await fetch(urlJoin(path), { ...opts });
 
   const ctype = res.headers.get("content-type") || "";
   const isJson = ctype.includes("application/json");
@@ -44,7 +42,7 @@ export type ApiUser = {
   email: string;
   role: Role;
   assigned_city?: string | null;
-  username?: string | null; // se seu backend tiver
+  username?: string | null; // se seu backend tiver este campo
   created_at?: string;
 };
 
@@ -89,11 +87,8 @@ export async function login(
   });
 }
 
-// (opcional) Quem sou eu
 export async function me(token: string): Promise<ApiUser> {
-  return request("/api/auth/me", {
-    headers: { ...auth(token) },
-  });
+  return request("/api/auth/me", { headers: { ...auth(token) } });
 }
 
 // ===== Users =====
@@ -208,29 +203,65 @@ export async function deleteRecord(token: string, id: number): Promise<{ ok: tru
 }
 
 // ===== Photos =====
+
+// Normaliza várias formas de resposta do backend para [{ url_path: "/algum/caminho.jpg" }]
+function normalizePhotoResp(data: any): { url_path: string }[] {
+  const toArray = (x: any): any[] =>
+    Array.isArray(x) ? x : Array.isArray(x?.urls) ? x.urls : Array.isArray(x?.files) ? x.files : [];
+
+  const arr = toArray(data);
+
+  return arr
+    .map((item: any) => {
+      const raw =
+        (typeof item === "string" && item) ||
+        item?.url_path ||
+        item?.url ||
+        item?.path ||
+        null;
+
+      if (!raw) return null;
+
+      try {
+        // Garante que teremos um path começando com "/"
+        const u = new URL(raw, API_BASE);
+        const path = u.pathname.startsWith("/") ? u.pathname : `/${u.pathname}`;
+        return { url_path: path };
+      } catch {
+        const path = String(raw);
+        return { url_path: path.startsWith("/") ? path : `/${path}` };
+      }
+    })
+    .filter(Boolean) as { url_path: string }[];
+}
+
 // Envia arquivos reais (File/Blob) para o record
 export async function uploadPhotos(
   token: string,
   recordId: number,
   phase: PhotoPhase,
   files: File[]
-): Promise<{ urls: string[] } | any> {
+): Promise<{ url_path: string }[]> {
   const form = new FormData();
   form.append("phase", phase);
   files.forEach((f) => form.append("files", f, f.name));
 
   const res = await fetch(urlJoin(`/api/records/${recordId}/photos`), {
     method: "POST",
-    headers: { ...auth(token) }, // NÃO definir Content-Type manualmente
+    headers: { ...auth(token) }, // NÃO setar Content-Type manualmente
     body: form,
   });
-  const data = await res.json().catch(() => null);
+
+  const ctype = res.headers.get("content-type") || "";
+  const data = ctype.includes("application/json") ? await res.json().catch(() => null) : null;
+
   if (!res.ok) {
     const msg =
       (data && (data.detail || data.message)) || `HTTP ${res.status} ${res.statusText}`;
     throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
   }
-  return data;
+
+  return normalizePhotoResp(data);
 }
 
 // Helper: transforma dataURL (base64) da câmera em File e manda pro backend
@@ -239,7 +270,7 @@ export async function uploadDataUrlsAsPhotos(
   recordId: number,
   phase: PhotoPhase,
   dataUrls: string[]
-): Promise<any> {
+): Promise<{ url_path: string }[]> {
   const files = dataUrls.map((d, idx) => dataURLtoFile(d, `photo_${phase.toLowerCase()}_${idx + 1}.jpg`));
   return uploadPhotos(token, recordId, phase, files);
 }

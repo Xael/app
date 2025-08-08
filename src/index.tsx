@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
@@ -562,7 +562,7 @@ const ReportsView: React.FC<{ records: ServiceRecord[]; locations: LocationRecor
   const filteredRecords = records.filter(r => {
     const recordDate = new Date(r.startTime);
     const start = startDate ? new Date(startDate) : null;
-    const end = endDate ? new Date(endDate) : null;
+    the end = endDate ? new Date(endDate) : null;
     if (start && recordDate < start) return false;
     if (end) { end.setHours(23, 59, 59, 999); if (recordDate > end) return false; }
     if (selectedServices.length > 0 && !selectedServices.includes(r.serviceType)) return false;
@@ -897,98 +897,126 @@ const ManageLocationsView: React.FC<{
   );
 };
 
-const ManageUsersView: React.FC<{ users: User[]; setUsers: React.Dispatch<React.SetStateAction<User[]>>; locations: LocationRecord[]; }> = ({ users, setUsers, locations }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState<Role>('OPERATOR');
-  const [assignedCity, setAssignedCity] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
+// ====== USERS DO BACKEND (substitui o antigo que usava localStorage)
+type ApiUser = { id: number; email: string; role: Role; assigned_city?: string | null };
+
+const ManageUsersView: React.FC<{ token: string; locations: LocationRecord[]; }> = ({ token, locations }) => {
+  const [users, setUsers] = useState<ApiUser[]>([]);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<Role>("OPERATOR");
+  const [assignedCity, setAssignedCity] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const cities = [...new Set(locations.map(l => l.city))].sort();
 
-  const resetForm = () => {
-    setUsername('');
-    setPassword('');
-    setRole('OPERATOR');
-    setAssignedCity('');
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await api.listUsers(token);
+      setUsers(list as ApiUser[]);
+    } catch (e: any) {
+      alert(e?.message || "Erro ao listar usuários");
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  function resetForm() {
+    setEmail("");
+    setPassword("");
+    setRole("OPERATOR");
+    setAssignedCity("");
     setEditingId(null);
-  };
+  }
 
-  const handleSave = () => {
-    if (!username || !password) {
-      alert('Usuário e senha são obrigatórios.');
+  async function handleSave() {
+    if (!email || (!editingId && !password)) {
+      alert("E-mail e senha (para novo usuário) são obrigatórios.");
       return;
     }
-    if ((role === 'OPERATOR' || role === 'FISCAL') && !assignedCity) {
-      alert('Por favor, selecione uma Cidade/Contrato para este funcionário.');
-      return;
+    try {
+      if (editingId) {
+        await api.updateUser(token, editingId, {
+          email,
+          ...(password ? { password } : {}),
+          role,
+          assigned_city: (role === "OPERATOR" || role === "FISCAL") ? assignedCity : undefined,
+        });
+      } else {
+        await api.createUser(token, {
+          email,
+          password,
+          role,
+          assigned_city: (role === "OPERATOR" || role === "FISCAL") ? assignedCity : undefined,
+        });
+      }
+      await refresh();
+      resetForm();
+    } catch (e: any) {
+      alert(e?.message || "Erro ao salvar usuário");
     }
+  }
 
-    const newUser: User = {
-      id: editingId || new Date().toISOString(),
-      username,
-      password,
-      role,
-      assignedCity: (role === 'OPERATOR' || role === 'FISCAL') ? assignedCity : undefined
-    };
+  function handleEdit(u: ApiUser) {
+    setEditingId(u.id);
+    setEmail(u.email);
+    setPassword("");
+    setRole(u.role);
+    setAssignedCity(u.assigned_city || "");
+  }
 
-    if (editingId) {
-      setUsers(users.map(u => u.id === editingId ? newUser : u));
-    } else {
-      setUsers([newUser, ...users]);
+  async function handleDelete(id: number) {
+    if (!confirm("Excluir este usuário?")) return;
+    try {
+      await api.deleteUser(token, id);
+      await refresh();
+    } catch (e: any) {
+      alert(e?.message || "Erro ao excluir");
     }
-    resetForm();
-  };
-
-  const handleEdit = (user: User) => {
-    setEditingId(user.id);
-    setUsername(user.username);
-    setPassword(user.password || '');
-    setRole(user.role);
-    setAssignedCity(user.assignedCity || '');
-  };
-
-  const handleDelete = (id: string) => {
-    if (window.confirm('Excluir este usuário?')) {
-      setUsers(users.filter(u => u.id !== id));
-    }
-  };
+  }
 
   return (
     <div>
       <div className="form-container card">
-        <h3>{editingId ? 'Editando Funcionário' : 'Adicionar Novo Funcionário'}</h3>
-        <input type="text" placeholder="Nome de usuário" value={username} onChange={e => setUsername(e.target.value)} />
-        <input type="text" placeholder="Senha" value={password} onChange={e => setPassword(e.target.value)} />
+        <h3>{editingId ? "Editando Funcionário" : "Adicionar Novo Funcionário"}</h3>
+        <input type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} />
+        <input type="password" placeholder={editingId ? "Senha (deixe em branco p/ manter)" : "Senha"} value={password} onChange={e => setPassword(e.target.value)} />
         <select value={role} onChange={e => setRole(e.target.value as Role)}>
           <option value="ADMIN">Administrador</option>
           <option value="OPERATOR">Operador</option>
           <option value="FISCAL">Fiscalização</option>
         </select>
-        {(role === 'OPERATOR' || role === 'FISCAL') && (
+        {(role === "OPERATOR" || role === "FISCAL") && (
           <select value={assignedCity} onChange={e => setAssignedCity(e.target.value)}>
             <option value="">Selecione a Cidade/Contrato</option>
             {cities.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         )}
-        <button className="button admin-button" onClick={handleSave}>{editingId ? 'Salvar Alterações' : 'Adicionar'}</button>
+        <button className="button admin-button" onClick={handleSave}>{editingId ? "Salvar Alterações" : "Adicionar"}</button>
         {editingId && <button className="button button-secondary" onClick={resetForm}>Cancelar</button>}
       </div>
-      <ul className="location-list">
-        {users.map(user => (
-          <li key={user.id} className="card list-item">
-            <div className="list-item-header">
-              <h3>{user.username}</h3>
-              <div>
-                <button className="button button-sm admin-button" onClick={() => handleEdit(user)}>Editar</button>
-                <button className="button button-sm button-danger" onClick={() => handleDelete(user.id)}>Excluir</button>
+
+      {loading ? <Loader text="Carregando usuários..." /> : (
+        <ul className="location-list">
+          {users.map(u => (
+            <li key={u.id} className="card list-item">
+              <div className="list-item-header">
+                <h3>{u.email}</h3>
+                <div>
+                  <button className="button button-sm admin-button" onClick={() => handleEdit(u)}>Editar</button>
+                  <button className="button button-sm button-danger" onClick={() => handleDelete(u.id)}>Excluir</button>
+                </div>
               </div>
-            </div>
-            <p><strong>Função:</strong> {user.role}</p>
-            {user.assignedCity && <p><strong>Cidade/Contrato:</strong> {user.assignedCity}</p>}
-          </li>
-        ))}
-      </ul>
+              <p><strong>Função:</strong> {u.role}</p>
+              {u.assigned_city && <p><strong>Cidade/Contrato:</strong> {u.assigned_city}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 };
@@ -1088,13 +1116,13 @@ const App = () => {
       });
       setRecords(srvRecords.map(mapRec));
 
-      if (srvUsers.length) {
+      if ((srvUsers as any[]).length) {
         const mapUser = (u: any): User => ({
           id: String(u.id),
           username: u.email,
           role: u.role as Role,
         });
-        setUsers(srvUsers.map(mapUser));
+        setUsers((srvUsers as any[]).map(mapUser));
       }
 
       redirectUser(user);
@@ -1301,7 +1329,7 @@ const App = () => {
         gpsUsed: r.gps_used,
         startTime: r.start_time || new Date().toISOString(),
         endTime: r.end_time || new Date().toISOString(),
-        beforePhotos: [], // (opcional) buscar fotos do record em endpoint dedicado
+        beforePhotos: [],
         afterPhotos: [],
       });
 
@@ -1336,7 +1364,8 @@ const App = () => {
         switch (view) {
           case 'ADMIN_DASHBOARD': return <AdminDashboard onNavigate={navigate} onBackup={handleBackup} onRestore={handleRestore} />;
           case 'ADMIN_MANAGE_LOCATIONS': return <ManageLocationsView locations={locations} setLocations={setLocations} token={token} />;
-          case 'ADMIN_MANAGE_USERS': return <ManageUsersView users={users} setUsers={setUsers} locations={locations} />;
+          case 'ADMIN_MANAGE_USERS': 
+            return token ? <ManageUsersView key={`users-${token}`} token={token} locations={locations} /> : <p>Faça login novamente.</p>;
           case 'ADMIN_MANAGE_GOALS': return <ManageGoalsView goals={goals} setGoals={setGoals} records={records} locations={locations} />;
           case 'REPORTS': return <ReportsView records={records} locations={locations} />;
           case 'HISTORY': return <HistoryView records={records} onSelect={handleSelectRecord} isAdmin={true} />;
