@@ -532,7 +532,6 @@ const ReportsView = ({ records, locations, forcedCity }) => {
         link.href = URL.createObjectURL(blob);
         link.download = `relatorio_crb_${new Date().toISOString().split('T')[0]}.xlsx`;
         link.click();
-        URL.revokeObjectURL(link.href);
     };
 
     const handleExportPdf = async () => {
