@@ -559,16 +559,24 @@ const ReportsView: React.FC<{ records: ServiceRecord[]; locations: LocationRecor
     );
   };
 
-  const filteredRecords = records.filter(r => {
+const filteredRecords = records
+  .filter((r) => {
     const recordDate = new Date(r.startTime);
     const start = startDate ? new Date(startDate) : null;
-    the end = endDate ? new Date(endDate) : null;
+    const end = endDate ? new Date(endDate) : null;
+
     if (start && recordDate < start) return false;
-    if (end) { end.setHours(23, 59, 59, 999); if (recordDate > end) return false; }
+    if (end) {
+      end.setHours(23, 59, 59, 999);
+      if (recordDate > end) return false;
+    }
+
     if (selectedServices.length > 0 && !selectedServices.includes(r.serviceType)) return false;
     if (selectedCity && r.locationCity !== selectedCity) return false;
     return true;
-  }).sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+  })
+  .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) setSelectedIds(filteredRecords.map(r => r.id));
