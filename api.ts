@@ -34,13 +34,22 @@ function auth(token: string) {
   return { Authorization: `Bearer ${token}` };
 }
 
+// ===== Helpers =====
+function deriveName(email: string, provided?: string) {
+  const n = (provided ?? "").trim();
+  if (n) return n;
+  if (!email) return "Usuário";
+  const local = email.includes("@") ? email.split("@")[0] : email;
+  return local || "Usuário";
+}
+
 // ===== Tipos =====
 export type Role = "ADMIN" | "OPERATOR" | "FISCAL";
 
 export type ApiUser = {
   id: number;
   email: string;
-  name?: string;                 // <- nome do funcionário
+  name?: string;                 // nome do funcionário
   role: Role;
   assigned_city?: string | null;
   username?: string | null;      // se seu backend tiver este campo
@@ -99,13 +108,21 @@ export async function listUsers(token: string): Promise<ApiUser[]> {
 
 export async function createUser(
   token: string,
-  payload: { name: string; email: string; password: string; role: Role; assigned_city?: string }
+  payload: { email: string; password: string; role: Role; assigned_city?: string; name?: string }
 ): Promise<ApiUser> {
-  // backend valida email e exige name
+  // backend valida email e exige name -> garantimos aqui
+  const body = {
+    name: deriveName(payload.email, payload.name),
+    email: payload.email,
+    password: payload.password,
+    role: payload.role,
+    ...(payload.assigned_city ? { assigned_city: payload.assigned_city } : {}),
+  };
+
   return request("/api/users", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...auth(token) },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
 }
 
@@ -114,10 +131,16 @@ export async function updateUser(
   id: number,
   payload: Partial<{ name: string; email: string; password: string; role: Role; assigned_city?: string }>
 ): Promise<ApiUser> {
+  // Se vier e-mail mas não vier name, preenche name automaticamente
+  const body: any = { ...payload };
+  if (!body.name && body.email) {
+    body.name = deriveName(body.email);
+  }
+
   return request(`/api/users/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", ...auth(token) },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
 }
 
