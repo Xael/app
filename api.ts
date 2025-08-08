@@ -40,9 +40,10 @@ export type Role = "ADMIN" | "OPERATOR" | "FISCAL";
 export type ApiUser = {
   id: number;
   email: string;
+  name?: string;                 // <- nome do funcionário
   role: Role;
   assigned_city?: string | null;
-  username?: string | null; // se seu backend tiver este campo
+  username?: string | null;      // se seu backend tiver este campo
   created_at?: string;
 };
 
@@ -79,7 +80,7 @@ export type PhotoPhase = "BEFORE" | "AFTER";
 export async function login(
   email: string,
   password: string
-): Promise<{ access_token: string; token_type: "bearer" }> {
+): Promise<{ access_token: string; token_type: "bearer" | string }> {
   return request("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -98,8 +99,9 @@ export async function listUsers(token: string): Promise<ApiUser[]> {
 
 export async function createUser(
   token: string,
-  payload: { email: string; password: string; role: Role; assigned_city?: string }
+  payload: { name: string; email: string; password: string; role: Role; assigned_city?: string }
 ): Promise<ApiUser> {
+  // backend valida email e exige name
   return request("/api/users", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...auth(token) },
@@ -110,7 +112,7 @@ export async function createUser(
 export async function updateUser(
   token: string,
   id: number,
-  payload: Partial<{ email: string; password: string; role: Role; assigned_city?: string }>
+  payload: Partial<{ name: string; email: string; password: string; role: Role; assigned_city?: string }>
 ): Promise<ApiUser> {
   return request(`/api/users/${id}`, {
     method: "PUT",

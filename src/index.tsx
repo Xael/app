@@ -906,10 +906,11 @@ const ManageLocationsView: React.FC<{
 };
 
 // ====== USERS DO BACKEND (substitui o antigo que usava localStorage)
-type ApiUser = { id: number; email: string; role: Role; assigned_city?: string | null };
+type ApiUser = { id: number; email: string; name?: string; role: Role; assigned_city?: string | null };
 
 const ManageUsersView: React.FC<{ token: string; locations: LocationRecord[]; }> = ({ token, locations }) => {
   const [users, setUsers] = useState<ApiUser[]>([]);
+  const [name, setName] = useState("");         // <- novo
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>("OPERATOR");
@@ -934,6 +935,7 @@ const ManageUsersView: React.FC<{ token: string; locations: LocationRecord[]; }>
   useEffect(() => { refresh(); }, [refresh]);
 
   function resetForm() {
+    setName("");                // <- limpar
     setEmail("");
     setPassword("");
     setRole("OPERATOR");
@@ -942,13 +944,14 @@ const ManageUsersView: React.FC<{ token: string; locations: LocationRecord[]; }>
   }
 
   async function handleSave() {
-    if (!email || (!editingId && !password)) {
-      alert("E-mail e senha (para novo usuário) são obrigatórios.");
-      return;
-    }
+    if (!name) { alert("Nome é obrigatório."); return; }             // <- validar
+    if (!email) { alert("E-mail é obrigatório."); return; }
+    if (!editingId && !password) { alert("Senha é obrigatória para novo usuário."); return; }
+
     try {
       if (editingId) {
         await api.updateUser(token, editingId, {
+          name,                                                     // <- enviar
           email,
           ...(password ? { password } : {}),
           role,
@@ -956,6 +959,7 @@ const ManageUsersView: React.FC<{ token: string; locations: LocationRecord[]; }>
         });
       } else {
         await api.createUser(token, {
+          name,                                                     // <- enviar
           email,
           password,
           role,
@@ -971,6 +975,7 @@ const ManageUsersView: React.FC<{ token: string; locations: LocationRecord[]; }>
 
   function handleEdit(u: ApiUser) {
     setEditingId(u.id);
+    setName(u.name || "");                                          // <- preencher
     setEmail(u.email);
     setPassword("");
     setRole(u.role);
@@ -991,8 +996,14 @@ const ManageUsersView: React.FC<{ token: string; locations: LocationRecord[]; }>
     <div>
       <div className="form-container card">
         <h3>{editingId ? "Editando Funcionário" : "Adicionar Novo Funcionário"}</h3>
+        <input type="text" placeholder="Nome" value={name} onChange={e => setName(e.target.value)} /> {/* <- novo campo */}
         <input type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} />
-        <input type="password" placeholder={editingId ? "Senha (deixe em branco p/ manter)" : "Senha"} value={password} onChange={e => setPassword(e.target.value)} />
+        <input
+          type="password"
+          placeholder={editingId ? "Senha (deixe em branco p/ manter)" : "Senha"}
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+        />
         <select value={role} onChange={e => setRole(e.target.value as Role)}>
           <option value="ADMIN">Administrador</option>
           <option value="OPERATOR">Operador</option>
@@ -1013,12 +1024,13 @@ const ManageUsersView: React.FC<{ token: string; locations: LocationRecord[]; }>
           {users.map(u => (
             <li key={u.id} className="card list-item">
               <div className="list-item-header">
-                <h3>{u.email}</h3>
+                <h3>{u.name || u.email}</h3> {/* mostrar nome se existir */}
                 <div>
                   <button className="button button-sm admin-button" onClick={() => handleEdit(u)}>Editar</button>
                   <button className="button button-sm button-danger" onClick={() => handleDelete(u.id)}>Excluir</button>
                 </div>
               </div>
+              <p><strong>E-mail:</strong> {u.email}</p>
               <p><strong>Função:</strong> {u.role}</p>
               {u.assigned_city && <p><strong>Cidade/Contrato:</strong> {u.assigned_city}</p>}
             </li>
