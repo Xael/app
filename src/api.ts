@@ -6,8 +6,6 @@ if (!API_BASE) console.warn("VITE_API_BASE_URL não está definida.");
 
 type Json = Record<string, any>;
 
-action: 'Created a new textdoc named api.ts'
-
 // Concatena base + path garantindo apenas uma barra entre eles
 function urlJoin(path: string) {
   if (!path) return API_BASE;
@@ -26,6 +24,19 @@ async function request<T = any>(path: string, opts: RequestInit = {}): Promise<T
     throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
   }
   return (data as T) ?? (undefined as any);
+}
+
+// Tenta a rota sem barra e, se vier 404, tenta com barra final (compat. DRF)
+async function requestWithSlashFallback<T = any>(path: string, opts: RequestInit = {}): Promise<T> {
+  try {
+    return await request<T>(path, opts);
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    if (msg.includes("404") && !path.endsWith("/")) {
+      return await request<T>(`${path}/`, opts);
+    }
+    throw e;
+  }
 }
 
 function auth(token: string) {
@@ -130,7 +141,7 @@ export async function updateUser(
 ): Promise<ApiUser> {
   const body: any = { ...payload };
   if (!body.name && body.email) body.name = deriveName(body.email);
-  return request(`/api/users/${id}`, {
+  return requestWithSlashFallback(`/api/users/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", ...auth(token) },
     body: JSON.stringify(body),
@@ -138,27 +149,12 @@ export async function updateUser(
 }
 
 export async function deleteUser(token: string, id: number): Promise<{ ok: true }> {
-  // 1) tenta sem barra (FastAPI, Laravel…)
-  try {
-    await request(`/api/users/${id}`, {
-      method: "DELETE",
-      headers: { ...auth(token) },
-    });
-    return { ok: true };
-  } catch (e: any) {
-    // se for 404, tenta com barra no final (Django REST costuma precisar)
-    const msg = String(e?.message || "");
-    if (msg.includes("404")) {
-      await request(`/api/users/${id}/`, {
-        method: "DELETE",
-        headers: { ...auth(token) },
-      });
-      return { ok: true };
-    }
-    throw e;
-  }
+  await requestWithSlashFallback(`/api/users/${id}`, {
+    method: "DELETE",
+    headers: { ...auth(token) },
+  });
+  return { ok: true };
 }
-
 
 // ===== Locations =====
 export async function listLocations(token: string): Promise<ApiLocation[]> {
@@ -185,7 +181,7 @@ export async function updateLocation(
   id: number,
   payload: Partial<{ city: string; name: string; area: number; lat?: number; lng?: number }>
 ): Promise<ApiLocation> {
-  return request(`/api/locations/${id}`, {
+  return requestWithSlashFallback(`/api/locations/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", ...auth(token) },
     body: JSON.stringify(payload),
@@ -193,10 +189,11 @@ export async function updateLocation(
 }
 
 export async function deleteLocation(token: string, id: number): Promise<{ ok: true }> {
-  return request(`/api/locations/${id}`, {
+  await requestWithSlashFallback(`/api/locations/${id}`, {
     method: "DELETE",
     headers: { ...auth(token) },
   });
+  return { ok: true };
 }
 
 // ===== Records =====
@@ -205,7 +202,7 @@ export async function listRecords(token: string): Promise<ApiRecord[]> {
 }
 
 export async function getRecord(token: string, id: number): Promise<ApiRecord> {
-  return request(`/api/records/${id}`, { headers: { ...auth(token) } });
+  return requestWithSlashFallback(`/api/records/${id}`, { headers: { ...auth(token) } });
 }
 
 export async function createRecord(
@@ -230,10 +227,11 @@ export async function createRecord(
 }
 
 export async function deleteRecord(token: string, id: number): Promise<{ ok: true }> {
-  return request(`/api/records/${id}`, {
+  await requestWithSlashFallback(`/api/records/${id}`, {
     method: "DELETE",
     headers: { ...auth(token) },
   });
+  return { ok: true };
 }
 
 // ===== Photos =====

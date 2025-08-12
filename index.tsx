@@ -1069,8 +1069,8 @@ const ReportsView: React.FC<{ records: ServiceRecord[]; locations: LocationRecor
 const fetchImageAsDataUrl = async (url: string) => {
   const resp = await fetch(toAbsUrl(url), {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    mode: 'cors',
   });
+  if (!resp.ok) throw new Error(`Falha ao carregar imagem (${resp.status})`);
   const blob = await resp.blob();
   return await new Promise<string>((resolve, reject) => {
     const fr = new FileReader();
