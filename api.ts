@@ -1,20 +1,20 @@
-// api.ts — MESMA pasta do index.tsx
+// api.ts — camada de acesso ao backend (fetch + tipagens)
 
 // ===== Base =====
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
-if (!API_BASE) console.warn("VITE_API_BASE_URL não está definida no Vercel.");
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+if (!API_BASE) console.warn("VITE_API_BASE_URL não está definida.");
 
 type Json = Record<string, any>;
 
-// Monta URL com path já normalizado
+action: 'Created a new textdoc named api.ts'
+
+// Concatena base + path garantindo apenas uma barra entre eles
 function urlJoin(path: string) {
+  if (!path) return API_BASE;
   return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-async function request<T = any>(
-  path: string,
-  opts: RequestInit = {}
-): Promise<T> {
+async function request<T = any>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(urlJoin(path), { ...opts });
 
   const ctype = res.headers.get("content-type") || "";
@@ -22,9 +22,7 @@ async function request<T = any>(
   const data = isJson ? await res.json().catch(() => null) : null;
 
   if (!res.ok) {
-    const msg =
-      (data && (data.detail || data.message)) ||
-      `HTTP ${res.status} ${res.statusText}`;
+    const msg = (data && (data.detail || data.message)) || `HTTP ${res.status} ${res.statusText}`;
     throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
   }
   return (data as T) ?? (undefined as any);
@@ -49,10 +47,10 @@ export type Role = "ADMIN" | "OPERATOR" | "FISCAL";
 export type ApiUser = {
   id: number;
   email: string;
-  name?: string;                 // nome do funcionário
+  name?: string;
   role: Role;
   assigned_city?: string | null;
-  username?: string | null;      // se seu backend tiver este campo
+  username?: string | null;
   created_at?: string;
 };
 
@@ -110,14 +108,13 @@ export async function createUser(
   token: string,
   payload: { email: string; password: string; role: Role; assigned_city?: string; name?: string }
 ): Promise<ApiUser> {
-  // backend valida email e exige name -> garantimos aqui
-  const body = {
+  const body: Json = {
     name: deriveName(payload.email, payload.name),
     email: payload.email,
     password: payload.password,
     role: payload.role,
-    ...(payload.assigned_city ? { assigned_city: payload.assigned_city } : {}),
   };
+  if (payload.assigned_city) body.assigned_city = payload.assigned_city;
 
   return request("/api/users", {
     method: "POST",
@@ -131,12 +128,8 @@ export async function updateUser(
   id: number,
   payload: Partial<{ name: string; email: string; password: string; role: Role; assigned_city?: string }>
 ): Promise<ApiUser> {
-  // Se vier e-mail mas não vier name, preenche name automaticamente
   const body: any = { ...payload };
-  if (!body.name && body.email) {
-    body.name = deriveName(body.email);
-  }
-
+  if (!body.name && body.email) body.name = deriveName(body.email);
   return request(`/api/users/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", ...auth(token) },
@@ -245,7 +238,7 @@ function normalizePhotoResp(data: any): { url_path: string }[] {
         item?.path ||
         null;
 
-      if (!raw) return null;
+      if (!raw) return null as any;
 
       try {
         // Garante que teremos um path começando com "/"
@@ -281,8 +274,7 @@ export async function uploadPhotos(
   const data = ctype.includes("application/json") ? await res.json().catch(() => null) : null;
 
   if (!res.ok) {
-    const msg =
-      (data && (data.detail || data.message)) || `HTTP ${res.status} ${res.statusText}`;
+    const msg = (data && (data.detail || data.message)) || `HTTP ${res.status} ${res.statusText}`;
     throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
   }
 
