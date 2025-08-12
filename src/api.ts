@@ -138,11 +138,27 @@ export async function updateUser(
 }
 
 export async function deleteUser(token: string, id: number): Promise<{ ok: true }> {
-  return request(`/api/users/${id}`, {
-    method: "DELETE",
-    headers: { ...auth(token) },
-  });
+  // 1) tenta sem barra (FastAPI, Laravel…)
+  try {
+    await request(`/api/users/${id}`, {
+      method: "DELETE",
+      headers: { ...auth(token) },
+    });
+    return { ok: true };
+  } catch (e: any) {
+    // se for 404, tenta com barra no final (Django REST costuma precisar)
+    const msg = String(e?.message || "");
+    if (msg.includes("404")) {
+      await request(`/api/users/${id}/`, {
+        method: "DELETE",
+        headers: { ...auth(token) },
+      });
+      return { ok: true };
+    }
+    throw e;
+  }
 }
+
 
 // ===== Locations =====
 export async function listLocations(token: string): Promise<ApiLocation[]> {
