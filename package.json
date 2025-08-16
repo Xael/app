@@ -1,5 +1,5 @@
 {
-  "name": "teste-novo-app",
+  "name": "copy-of-tentando-acabar-o-jogo",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,11 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^19.1.1",
-    "exceljs": "4.4.0",
-    "jspdf": "2.5.1",
-    "html2canvas": "1.4.1",
-    "react-dom": "^19.1.1"
+    "@google/genai": "^1.12.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

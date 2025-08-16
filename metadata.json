@@ -1,8 +1,6 @@
 {
-  "name": "teste novo app",
-  "description": "An application to log urban cleaning services with geolocation and photo capture.",
-  "requestFramePermissions": [
-    "camera"
-  ],
+  "name": "Copy of TENTANDO ACABAR O JOGO",
+  "description": "Jogo de cartas + tabuleiro",
+  "requestFramePermissions": [],
   "prompt": ""
 }
